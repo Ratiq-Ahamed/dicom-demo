@@ -22,7 +22,7 @@ export function Application(){const {data,user,ready,init,switchRole,toast,messa
  if(!ready||!data)return <div className="loading"><img src="/assets/logo.png" alt="DICOM Reporting Services"/><span>Preparing your reporting workspace…</span></div>;
  const choose=(role:Role,id?:string)=>{switchRole(role,id);router.push(`/${role}`);};
  const pieces=path.split('/').filter(Boolean), routeRole=pieces[0], section=pieces[1]??'',caseId=pieces[2];
- const validRole=routeRole===user?.role;
+ const validRole=routeRole===user?.role&&!!nav[user?.role??'admin'].find(n=>n[0]===section);
  const current=nav[user?.role??'admin'].find(n=>n[0]===section);
  const pageTitle=caseId?'Case Workspace':current?.[1]??'Dashboard';
  const unread=data.notifications.filter(n=>n.role===user?.role&&n.entityId===user?.entityId&&!n.read).length;
