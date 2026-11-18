@@ -3,10 +3,12 @@ import { transition, uid } from './workflow';
 import { emptyOperations, generateInvoices, logOps, monthDates, operationsTransition } from './operations';
 import type { OpsAction } from './operations';
 
-export const simulationAllowed=()=>process.env.NEXT_PUBLIC_APP_ENV!=='production'&&process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED==='true';
+// This standalone demo must also work in hosted Next.js production builds.
+// A live application environment or an explicit opt-out still disables simulation.
+export const simulationAllowed=()=>process.env.NEXT_PUBLIC_APP_ENV!=='production'&&process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED!=='false';
 export function demoMonths(){const months:string[]=[];const now=new Date();for(let n=1;months.length<6;n++){const d=new Date(Date.UTC(now.getFullYear(),now.getMonth()-n,1));const m=d.toISOString().slice(0,7);if(monthDates(m).length===30)months.push(m);}return months;}
 export function generateSimulation(input:DemoData,user:User,month:string){
- if(user.role!=='admin'||!simulationAllowed())throw new Error('Simulation is available only to Admin in an explicitly enabled demo environment.');
+ if(user.role!=='admin'||!simulationAllowed())throw new Error('Simulation is available only to Admin when enabled for this deployment.');
  if(monthDates(month).length!==30)throw new Error('Select one of the 30-day demo months.');
  let data=structuredClone(input);const op=data.operations??=emptyOperations();if(op.simulations.some(s=>s.month===month))throw new Error('This month already has a simulation. Use Regenerate to replace that batch.');
  const batchId='sim-'+uid(),stamp=new Date().toISOString();op.simulations.unshift({id:batchId,month,status:'Generating',generatedAt:stamp,counts:{}});

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seed } from '../src/domain/seed';
-import { generateSimulation, resetSimulation } from '../src/domain/simulation';
+import { generateSimulation, resetSimulation, simulationAllowed } from '../src/domain/simulation';
 import { isValidMonth, monthDates, operationsTransition } from '../src/domain/operations';
 import type { User } from '../src/domain/types';
 process.env.NEXT_PUBLIC_APP_ENV='demo';
@@ -22,3 +22,17 @@ test('connected simulation uses /30 payroll, first-delivery invoices, immutable 
 });
 
 test('month validation rejects incomplete input and preserves leap-year dates',()=>{for(const value of ['',undefined,'2026-1','2026-13','12026-11','0000-01'])assert.equal(isValidMonth(value),false);assert.equal(monthDates('2026-02').length,28);assert.equal(monthDates('2024-02').length,29);assert.throws(()=>monthDates('2026-13'));});
+
+
+test('hosted demo enables simulation without local environment settings and respects explicit disable',()=>{
+ const appEnv=process.env.NEXT_PUBLIC_APP_ENV,enabled=process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED;
+ try{
+  delete process.env.NEXT_PUBLIC_APP_ENV;delete process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED;
+  assert.equal(simulationAllowed(),true);
+  process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED='false';assert.equal(simulationAllowed(),false);
+  process.env.NEXT_PUBLIC_APP_ENV='production';process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED='true';assert.equal(simulationAllowed(),false);
+ }finally{
+  if(appEnv===undefined)delete process.env.NEXT_PUBLIC_APP_ENV;else process.env.NEXT_PUBLIC_APP_ENV=appEnv;
+  if(enabled===undefined)delete process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED;else process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED=enabled;
+ }
+});
