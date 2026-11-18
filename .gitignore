@@ -8,3 +8,4 @@ node_modules/
 .env
 .env.*
 DICOM_Prototype_Visual_References.zip
+!.env.example

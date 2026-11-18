@@ -27,7 +27,7 @@ To run the production build on another port, use `npm.cmd start -- --port 3100`.
 1. Choose **Scan Centre** and Velachery Scan Centre. In **New Case**, fill synthetic details and use the sample prescription, scan, and optional voice note. Review and submit. Alternatively, use unassigned fixture **DRS-2026-0145**.
 2. Switch to **Admin > Doctors**. Open **Edit profile / reviewer** for **Dr. Priya Menon** and select **Dr. Arjun Nair** as her peer reviewer. Save. Priya and Arjun are ordinary Doctor accounts, not separate roles.
 3. In **Admin > Case Queue**, assign the case to Priya.
-4. Switch to **Doctor**, select Priya in **Demo identity**, and open the case in **Work Queue**. Start reporting, complete the three checklist items, choose a PDF (up to 100 MB) or use a synthetic sample, and **Submit for Peer Review**. The case becomes **Pending Peer Review**.
+4. Switch to **Doctor** using **Demo**, select Priya in **Demo identity**, and open the case in **Work Queue**. Start reporting, complete the three checklist items, choose a PDF (up to 100 MB) or use a synthetic sample, and **Submit for Peer Review**. The case becomes **Pending Peer Review**.
 5. Switch Doctor identity to Arjun and open **Peer Reviews**. Open the report, inspect the PDF and version, and choose **Verify & Forward to Admin**. The case becomes **Pending Admin Approval**.
 6. Switch to **Admin > Report Review**, open that case, inspect the reviewer and verification timestamp, and **Approve & Release**.
 7. Switch to **Scan Centre > My Cases**. The case shows **Received**, and its final PDF can be opened or downloaded. The download contains the uploaded bytes.
@@ -35,7 +35,13 @@ To run the production build on another port, use `npm.cmd start -- --port 3100`.
 9. Admin may **Request Changes** with a reason after verification. The next version must be verified again. For a centre-requested correction after delivery, Admin can route it to the reporting doctor or handle the correction and upload a revised PDF; both routes require peer verification before redelivery. The centre retains access to its previous released PDF meanwhile.
 10. Explore training at accelerated playback speed, shared Admin training progress, operational analytics, centres including Bahrain timezones, and mobile navigation. These existing modules remain available.
 
-The sidebar **Presenter guide** describes these handoffs. **Reset demo data** clears saved PDF blobs and restores the synthetic fixtures.
+Use **Demo** in the header to switch roles and accounts. Secondary navigation is under **More**. The sidebar **About this demo** contains the presenter guide and **Reset demo data**, which clears saved PDF blobs and restores the synthetic fixtures.
+
+## Streamlined role views
+
+Dashboards use all saved operational cases, without a rolling date cutoff. Admin sees Needs Assignment, Needs Approval, and Needs Attention; doctors switch between Reporting Cases and Peer Reviews. Scan centres see only Pending and Received, with no TAT, assignments, internal statuses, audit history, or reviewer details. Centre screens consume an allowlisted data projection; final PDFs remain available during corrections.
+
+Case lists default to all dates, with advanced filters closed until needed. Workflow details, attachments, historical versions, internal timing, directory statistics, and optional submission notes use expandable sections. Loading/error/empty states are explicit. Existing supported routes remain usable.
 
 ## Peer-review behavior
 
@@ -44,7 +50,7 @@ The sidebar **Presenter guide** describes these handoffs. **Reset demo data** cl
 - **Mapping changes:** undecided tasks transfer to the new reviewer with new task IDs; stale decisions are rejected. Removing or deactivating a reviewer holds their pending tasks. Completed reviews retain their attribution.
 - **Review history:** each PDF version is immutable. Reviewer decisions, mandatory correction reasons, timestamps, reassignment events, Admin changes, and releases remain linked to the case/version.
 - **Approval:** Admin release requires verification of the latest version. Viewing an older PDF disables current-version approval actions. An Admin-uploaded revision requires fresh peer verification.
-- **Visibility:** doctors have separate reporting and peer-review queues. Reviewers cannot report on another doctor's case or read their private working notes. Centres see only **Pending**, **Assigned**, or **Received**, and only released report versions. Internal review stages and events are hidden from centres.
+- **Visibility:** doctors have separate reporting and peer-review queues. Reviewers cannot report on another doctor's case or read their private working notes. Centres see only **Pending** or **Received**, and only released report versions. Internal review stages and events are hidden from centres.
 - **PDFs:** actual uploads persist in IndexedDB across refresh and persona switches. Native browser PDF preview includes open/download fallbacks. If a stored upload is missing, an explicit error is shown; a synthetic report is never silently substituted. Sample/legacy files are labeled.
 - **Migration:** schema v1 data is migrated in place to v2. Existing cases, training, report history, and previous deliveries are retained. Old unreleased reports require peer review; old releases do not receive fabricated verification records. Since the previous demo stored only filenames, those historical reports remain labeled legacy samples.
 
@@ -79,3 +85,27 @@ Scan/prescription/voice attachments remain simulations. Browser speech synthesis
 - `src/lib`: IndexedDB PDF storage, sample PDF generation, actual PDF download, and CSV export.
 - `src/app` and `public`: App Router entry, shared styling, supplied brand assets, and static-only PWA.
 - `tests`: domain scenarios and optional browser acceptance script.
+
+## Business operations demo
+
+Admin's **Business operations** navigation contains Invoices, Attendance, Leave Management, Payroll, and Demo Simulation. Doctor accounts have My Attendance and Leave & Permission; scan centres have My Invoices. Doctors are the staff profiles; no additional employee role was introduced.
+
+- Rates default to INR 250 per first delivered case, customizable by centre. Billing periods are the 26th of the previous month through the 25th; generation is allowed only once the period closes. Corrections do not create a second charge. Invoices snapshot rates and amounts, payment status and simulated delivery history.
+- Doctor salaries default to INR 25,000. Payroll always uses a 30-day divisor. Full-day unpaid absence deducts base/30; half-day unpaid absence deducts half that amount. The total deduction is rounded once to paise. Paid leave and weekly offs do not deduct salary. Approved overtime and reasoned positive/negative adjustments are included.
+- Attendance uses an Admin-maintained calendar with present, absent, half-day, approved leave, weekly off, holiday, late markers and approved overtime. Working days, holidays, work start/grace, default paid leave/permissions and overtime eligibility/rates are configurable. Late status is recorded manually; it does not invent an automatic salary penalty.
+- Finalize all attendance and decide pending requests before processing payroll. Approved payroll is locked; changes require an audited revision, followed by finalized corrections and explicit draft recalculation. Salary changes do not rewrite previous approved snapshots.
+- Invoice PDFs, report PDFs and approved payslip PDFs are actual binary documents stored in IndexedDB. No invoice or payroll PDF is written to VPS disk. Monthly payroll summaries export as CSV.
+
+### One-click simulation
+
+Open **Admin > Business operations > Demo Simulation**, select a completed 30-day calendar month, and click **Generate 30 Days of Demo Data**. After confirmation it generates three synthetic doctor profiles, two centres, 90 attendance records, leave decisions, payroll and payslips, 60 case workflows and per-centre invoices/PDFs. All amounts are calculated by the same demo services used by the normal screens. Existing records are preserved.
+
+The selected period uses an actual 30-day calendar month so the complete monthly payroll requires neither fabricated extra dates nor incomplete month finalization. Weekly offs/holidays follow the configured policy. Pending permission examples target the next month; finalized payroll never depends on undecided leave.
+
+Reset and regeneration target only the selected batch's accounts, records and PDF IDs. Existing cases, invoices and staff remain unchanged. Batch ownership is recorded on generated records. Operational counts and analytics derive from those records, not fixed dashboard figures.
+
+Copy `.env.example` to `.env.local` for the explicit demo environment. Simulation requires `NEXT_PUBLIC_DEMO_SIMULATION_ENABLED=true` and is denied when `NEXT_PUBLIC_APP_ENV=production`, even if the enable flag is set. Production deployments must use `NEXT_PUBLIC_APP_ENV=production` and disable the flag. This is a frontend demonstration gate, not server-side security.
+
+The invoice scheduler and simulated email queue operate while the demo is open, with queued work reconciled when Admin returns. They do not run as a production cron service, send real email, collect payments, or create a PostgreSQL database. The separately discovered full-stack repository was inspected but intentionally not modified following the user's instruction to keep changes in this frontend demo. BYTEA storage, FastAPI/Alembic, production auth and transactional email require that separate backend integration.
+
+Focused verification: `npm.cmd run test:operations` checks calculation snapshots, idempotent billing, permissions and safe reset; `npm.cmd run test:operations-browser` checks the one-click workflow, document creation, role isolation and reset using an existing Playwright Core installation as described above.

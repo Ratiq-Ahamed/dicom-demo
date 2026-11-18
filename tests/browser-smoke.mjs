@@ -40,15 +40,23 @@ async function status(expected) {
   await waitFor(async () => (await data()).cases.find(c => c.id === id).status === expected, expected);
 }
 async function role(value, identity) {
+  await page.getByRole('button', { name: 'Demo', exact: true }).click();
   await page.getByLabel('Demo role', { exact: true }).selectOption(value);
-  await page.waitForURL(base + '/' + value);
-  if (identity) await page.getByLabel('Demo identity', { exact: true }).selectOption(identity);
+  if(value!=='admin')await page.getByLabel('Demo identity', { exact: true }).selectOption(identity??(value==='doctor'?'doctor-1':'centre-1'));
+  await page.getByRole('button', { name:'Switch', exact:true }).click();
+  await page.waitForURL(base+'/'+value);
+  await page.getByRole('dialog').waitFor({state:'hidden'});
 }
 async function openCase(roleName, list = 'cases', caseId = id) {
-  await page.locator('.sidebar nav a[href="/' + roleName + '/' + list + '"]').click();
+  let suffix='';if(roleName==='centre'){const c=(await data()).cases.find(c=>c.id===caseId);suffix='?status='+(c.deliveries.length?'Received':'Pending');}
+  await page.goto(base+'/'+roleName+'/'+list+suffix);
   await page.getByLabel('Search cases', { exact: true }).fill(caseId);
   await page.locator('.table-desktop').getByRole('link', { name: caseId, exact: true }).click();
   await page.getByRole('heading', { name: caseId }).waitFor();
+}
+async function centrePrivacy(){
+ const text=await page.locator('.workspace').innerText();
+ assert(!/\bTAT\b|Upload delay|Assignment delay|Assigned doctor|Peer reviewer|Peer verification|Pending Peer Review|Pending Admin Approval|Reporting workflow|Activity history|Admin revision|Doctor submission|Awaiting assignment/.test(text),'Centre screen exposes internal tracking');
 }
 async function upload(n, admin = false) {
   if (!admin) for (const box of await page.locator('.quality-checks input').all()) await box.check();
@@ -70,7 +78,7 @@ async function noOverflow(label) {
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), label + ' overflows viewport');
 }
 async function reportLayout() {
-  await page.locator('.actual-pdf').waitFor();
+  await page.locator('.actual-pdf').first().waitFor();
   const layout = await page.evaluate(() => {
     const frame = document.querySelector('.actual-pdf');
     const summary = document.querySelector('.verification-summary');
@@ -94,6 +102,11 @@ async function reportLayout() {
 try {
   await page.goto(base);
   await page.locator('.persona-card').filter({ hasText: 'DICOM Admin' }).click();
+  await page.waitForURL(base + '/admin');
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem('dicom-demo-v1'));const age=value=>{if(typeof value==='string'&&/^2026-\d\d-\d\dT/.test(value))return new Date(new Date(value).getTime()-365*86400000).toISOString();if(Array.isArray(value))return value.map(age);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,v])=>[key,age(v)]));return value;};localStorage.setItem('dicom-demo-v1',JSON.stringify(age(saved)));});
+  await page.reload();
+  for(const persona of ['admin','doctor','centre']){await role(persona);await page.locator('.dashboard-queue').waitFor();assert(await page.locator('.dashboard-queue tbody tr').count()>0,persona+' lost old saved cases');assert(!await page.getByLabel('Dashboard date range').count());if(persona==='centre')await centrePrivacy();await screenshot(persona+'-essential-dashboard');}
+  await role('admin');
   await page.locator('.sidebar nav a[href="/admin/doctors"]').click();
   const priya = page.locator('.doctor-directory > .card').filter({ has: page.getByRole('heading', { name: 'Dr. Priya Menon', exact: true }) });
   await priya.getByRole('button', { name: 'Edit profile / reviewer' }).click();
@@ -141,7 +154,7 @@ try {
   await role('centre', 'centre-1');
   await openCase('centre');
   assert.equal(await page.locator('.heading-actions .badge').innerText(), 'Received');
-  assert(!/Pending Peer Review|Pending Admin Approval/.test(await page.locator('.workspace').innerText()));
+  await centrePrivacy();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download final report', exact: true }).click();
   const download = await downloadPromise;
@@ -206,6 +219,7 @@ try {
     await page.getByRole('heading', { name: id }).waitFor();
     await noOverflow(persona + ' mobile case');
     await reportLayout();
+    if(persona==='centre')await centrePrivacy();
     await screenshot(persona + '-case-mobile');
   }
   assert.deepEqual(errors, []);
@@ -255,7 +269,14 @@ try {
       assert(!/Page not found|This workspace belongs to another role/.test(await page.locator('.workspace h1').innerText()), target);
     }
   }
+  await role('centre');
+  await page.goto(base+'/centre/cases?status=Assigned');
+  await page.locator('.category-tabs').waitFor();assert.equal(await page.locator('.category-tabs .active').textContent(),'Pending'+String((await data()).cases.filter(c=>c.centreId==='centre-1'&&!c.deliveries.length).length));await centrePrivacy();
+  await page.goto(base+'/centre/corrections');await page.waitForURL(base+'/centre/cases?status=Received');await centrePrivacy();
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem('dicom-demo-v1'));saved.data.cases=[];localStorage.setItem('dicom-demo-v1',JSON.stringify(saved));});await page.reload();
+  for(const persona of ['admin','doctor','centre']){await role(persona);await page.locator('.workspace h1').waitFor();assert.equal(await page.locator('.dashboard-queue .empty').count(),1);}
   assert.deepEqual(errors, []);
+  console.log('PASS saved/empty datasets, centre privacy and legacy category URLs');
   console.log('PASS existing features: case submission, training playback, every role navigation page; mobile mapping modal and peer queue');
 } catch (error) {
   await screenshot('failure').catch(() => {});

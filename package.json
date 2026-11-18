@@ -7,8 +7,10 @@
     "build": "next build --webpack",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/domain.test.ts",
-    "test:browser": "node tests/browser-smoke.mjs"
+    "test": "tsx --test tests/domain.test.ts tests/operations.test.ts",
+    "test:browser": "node tests/browser-smoke.mjs",
+    "test:operations": "node --import tsx --test tests/operations.test.ts",
+    "test:operations-browser": "node tests/operations-browser.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",

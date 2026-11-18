@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seed } from '../src/domain/seed';
 import { centreStatus, latestReview, peerCases, reportingCases, visibleAudit, canAssign, caseMetrics, formatTime, mergeIntervals, transition, visibleCases, watched } from '../src/domain/workflow';
+import { centreCases, dashboardCases, pendingPeerCases, visibleNotifications } from '../src/domain/presentation';
 import { migrateData } from '../src/domain/migration';
 import { validatePDF } from '../src/lib/pdf-storage';
 import type { Case, DemoData, User } from '../src/domain/types';
@@ -23,7 +24,7 @@ function map(d:DemoData,id=doctor.id,reviewerId:string|undefined=reviewer.id){co
 
 test('complete peer lifecycle and centre correction preserve V1 and deliveries',()=>{
  let d=upload(reporting(),1);const id=d.cases[0].id,v1=structuredClone(d.cases[0].reports[0]);
- assert.equal(d.cases[0].status,'PENDING_PEER_REVIEW');assert(peerCases(d,reviewer.id).some(c=>c.id===id));assert.equal(centreStatus(d.cases[0]),'Assigned');
+ assert.equal(d.cases[0].status,'PENDING_PEER_REVIEW');assert(peerCases(d,reviewer.id).some(c=>c.id===id));assert.equal(centreStatus(d.cases[0]),'Pending');
  assert.throws(()=>approve(d),/peer verified/);d=approve(verify(d));assert.equal(centreStatus(d.cases[0]),'Received');assert.equal(d.cases[0].status,'DELIVERED');
  d=transition(d,centre,{type:'CORRECT',caseId:id,category:'Patient details',reason:'Fix referrer'},time(12));assert.equal(centreStatus(d.cases[0]),'Received');
  d=transition(d,admin,{type:'ROUTE_CORRECTION',caseId:id,doctorId:doctor.id},time(13));d=upload(d,2);assert.throws(()=>approve(d));d=approve(verify(d));
@@ -81,3 +82,8 @@ test('training gate defaults off and blocks new live work when enabled',()=>{let
 test('UTC timing is invariant across Bahrain and IST display',()=>{const d=seed(anchor),c=d.cases.find(c=>c.deliveredAt)!;const before=caseMetrics(c);assert.notEqual(formatTime(anchor,'Asia/Kolkata'),formatTime(anchor,'Asia/Bahrain'));assert.deepEqual(caseMetrics(c),before);assert.equal(formatTime(anchor,'Asia/Kolkata').includes('01:30'),true);assert.equal(formatTime(anchor,'Asia/Bahrain').includes('11:00'),true);});
 test('draft can be saved, edited and submitted once',()=>{let d=seed(anchor);const c=newCase(d);d=transition(d,centre,{type:'SAVE_CASE',value:c,submit:false},anchor);assert.equal(d.cases[0].status,'DRAFT');d=transition(d,centre,{type:'SAVE_CASE',value:{...d.cases[0],patient:'Updated Demo'},submit:true},time(1));assert.equal(d.cases[0].patient,'Updated Demo');assert.equal(d.cases.filter(x=>x.id===c.id).length,1);assert.throws(()=>transition(d,centre,{type:'SAVE_CASE',value:d.cases[0],submit:true},time(2)));});
 test('notification read updates are scoped to their recipient',()=>{const d=submitted();const next=transition(d,centre,{type:'READ'},anchor);assert(next.notifications.filter(n=>n.role==='admin').every(n=>!n.read));});
+
+test('dashboard selectors retain old work without a rolling submission cutoff',()=>{const d=seed('2020-01-01T08:00:00.000Z');assert.equal(dashboardCases(d,admin).length,40);assert(dashboardCases(d,doctor).length>0);assert(centreCases(d,centre).length>0);assert(pendingPeerCases(d,'doctor-3').length>0);});
+test('centre projections expose only own submitted information and released PDF files',()=>{const d=seed(anchor),views=centreCases(d,centre);assert(views.length>0);for(const c of views){assert(['Pending','Received'].includes(c.category));for(const forbidden of ['doctorId','peerReviews','audit','status','reviewComment','workingNote','assignedAt','doctorSubmittedAt','approvedAt'])assert(!Object.hasOwn(c,forbidden));for(const report of c.reports){assert(!Object.hasOwn(report,'authorId'));assert(!Object.hasOwn(report,'authorRole'));assert(!Object.hasOwn(report,'note'));assert(c.category==='Received');}}assert.equal(centreCases(d,doctor).length,0);});
+test('centre notifications omit assignment details and use public wording for releases',()=>{let d=upload(reporting(),1);d=approve(verify(d));const notes=visibleNotifications(d,centre);assert(notes.length>0);assert(notes.every(n=>n.title.startsWith('Report available:')));assert(!notes.some(n=>/assigned|peer|approval/i.test(n.title)));});
+test('centre categories stay Received during corrections and exclude internal revision versions',()=>{let d=approve(verify(upload(reporting(),1)));const id=d.cases[0].id;d=transition(d,centre,{type:'CORRECT',caseId:id,category:'Patient details',reason:'Clarify reference'});d=transition(d,admin,{type:'ROUTE_CORRECTION',caseId:id,doctorId:doctor.id});d=upload(d,2);const c=centreCases(d,centre).find(c=>c.id===id)!;assert.equal(c.category,'Received');assert.equal(c.reports.length,1);assert.equal(c.correctionSent,true);assert.equal(c.canRequestCorrection,false);});

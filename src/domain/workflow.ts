@@ -4,12 +4,12 @@ export function reportingCases(data:DemoData,id:string){return data.cases.filter
 export const latestReview=(c:Case)=>(c.peerReviews??[]).filter(r=>r.versionId===c.reports.at(-1)?.id).at(-1);
 export function peerCases(data:DemoData,id:string){return data.cases.filter(c=>(c.peerReviews??[]).some(r=>r.reviewerId===id&&r.status!=='Superseded'));}
 export function visibleCases(data:DemoData,user:User){return data.cases.filter(c=>user.role==='admin'||(user.role==='centre'?c.centreId===user.entityId:c.doctorId===user.entityId||(c.peerReviews??[]).some(r=>r.reviewerId===user.entityId&&r.status!=='Superseded')));}
-export function centreStatus(c:Case){return c.deliveries.length?'Received':c.doctorId?'Assigned':'Pending';}
+export function centreStatus(c:Case):'Pending'|'Received'{return c.deliveries.length?'Received':'Pending';}
 export function visibleAudit(c:Case,user:User){return c.audit.filter(a=>user.role==='centre'?!a.internal&&(/^(Case submitted|Draft saved|Assigned to |Correction requested:|Final report delivered|Corrected report redelivered|Report approved and delivered)/.test(a.message)):user.role==='admin'||(!a.privateDoctorId||a.privateDoctorId===user.entityId)&&a.message!=='Working note saved');}
 export function activeReviewer(data:DemoData,c:Case){const id=data.doctors.find(d=>d.id===c.doctorId)?.reviewerId;return data.doctors.find(d=>d.id===id&&d.active&&d.id!==c.doctorId&&d.id!==c.reports.at(-1)?.authorId);}
 /** Reconcile undecided tasks only. A transfer creates a new task, invalidating stale dialogs. */
-export function syncPeerAssignments(data:DemoData,now:string,actor:User){
- for(const c of data.cases.filter(c=>['REVIEWER_REQUIRED','PENDING_PEER_REVIEW'].includes(c.status))){
+export function syncPeerAssignments(data:DemoData,now:string,actor:User,caseId?:string){
+ for(const c of data.cases.filter(c=>(!caseId||c.id===caseId)&&['REVIEWER_REQUIRED','PENDING_PEER_REVIEW'].includes(c.status))){
   const version=c.reports.at(-1);if(!version)continue;const reviewer=activeReviewer(data,c),prior=latestReview(c);
   if(prior&&prior.reviewerId===reviewer?.id&&prior.status===(reviewer?'Pending':'Waiting assignment'))continue;
   if(prior&&['Pending','Waiting assignment'].includes(prior.status))prior.status='Superseded';
@@ -34,7 +34,7 @@ export const duration=(n?:number)=>n===undefined?'Not available':n<1?'<1 min':n<
 export function formatTime(at?:string,tz='Asia/Kolkata'){return at?new Intl.DateTimeFormat('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:tz}).format(new Date(at)):'Not yet';}
 export const statusLabel=(s:string)=>({SUBMITTED:'Unassigned',IN_PROGRESS:'In reporting',REVIEWER_REQUIRED:'Reviewer Assignment Required',PENDING_PEER_REVIEW:'Pending Peer Review',AWAITING_REVIEW:'Pending Admin Approval',REVISION_REQUESTED:'Revision requested',CORRECTION_REQUESTED:'Correction requested',CORRECTION_IN_PROGRESS:'Correction in progress',REDELIVERED:'Redelivered',DELIVERED:'Delivered',ASSIGNED:'Assigned',DRAFT:'Draft'}[s]??s);
 function assert(value:unknown,message:string):asserts value {if(!value)throw new Error(message);}
-export function transition(input:DemoData,user:User,action:Action,now=new Date().toISOString()):DemoData {
+export function transition(input:DemoData,user:User,action:Exclude<Action,{type:'OPS'}>,now=new Date().toISOString()):DemoData {
  const data=structuredClone(input); const admin=()=>assert(user.role==='admin','Only Admin can perform this action.');
  const notify=(role:Role,entityId:string,title:string,caseId?:string)=>data.notifications.unshift({id:uid(),role,entityId,title,caseId,at:now,read:false});
  if(action.type==='READ'){data.notifications.forEach(n=>{if(n.role===user.role&&n.entityId===user.entityId&&(!action.notificationId||n.id===action.notificationId))n.read=true;});return data;}
@@ -68,7 +68,7 @@ export function transition(input:DemoData,user:User,action:Action,now=new Date()
   assert(action.filename.toLowerCase().endsWith('.pdf'),'Choose a PDF report.');
   assert(action.pdfId,'A stored PDF is required.');assert(action.expectedVersionId===c.reports.at(-1)?.id,'The report changed. Reload before uploading another version.');
   if(user.role==='admin'){admin();assert(['AWAITING_REVIEW','CORRECTION_REQUESTED','CORRECTION_IN_PROGRESS','REVISION_REQUESTED'].includes(c.status),'A submitted report or correction is required.');assert(c.doctorId,'Assign a reporting doctor first.');}else{doctor();assert(['IN_PROGRESS','REVISION_REQUESTED','CORRECTION_IN_PROGRESS'].includes(c.status),'Start the assigned case before submitting a report.');assert(c.status!=='CORRECTION_IN_PROGRESS'||c.corrections.some(x=>x.status==='Waiting doctor'),'Admin is handling this correction.');c.doctorSubmittedAt=now;}
-  const number=c.reports.length+1,versionId=uid();c.reports.push({id:versionId,number,authorId:user.id,authorRole:user.role,createdAt:now,filename:action.filename,note:action.note,pdfId:action.pdfId,sample:action.sample});c.status='REVIEWER_REQUIRED';c.reviewComment=undefined;c.reviewSource=undefined;log(`V${number} — Uploaded by ${user.name}`,true,versionId);syncPeerAssignments(data,now,user);if(c.doctorId)notify('doctor',c.doctorId,`V${number} ${c.status==='REVIEWER_REQUIRED'?'saved; reviewer assignment required':'submitted for peer verification'}: ${c.id}`,c.id);
+  const number=c.reports.length+1,versionId=uid();c.reports.push({id:versionId,number,authorId:user.id,authorRole:user.role,createdAt:now,filename:action.filename,note:action.note,pdfId:action.pdfId,sample:action.sample});c.status='REVIEWER_REQUIRED';c.reviewComment=undefined;c.reviewSource=undefined;log(`V${number} — Uploaded by ${user.name}`,true,versionId);syncPeerAssignments(data,now,user,c.id);if(c.doctorId)notify('doctor',c.doctorId,`V${number} ${c.status==='REVIEWER_REQUIRED'?'saved; reviewer assignment required':'submitted for peer verification'}: ${c.id}`,c.id);
  }else if(action.type==='PEER_VERIFY'||action.type==='PEER_CORRECT'){
   const review=latestReview(c),v=c.reports.at(-1);assert(user.role==='doctor'&&data.doctors.some(d=>d.id===user.entityId&&d.active),'Only an active assigned reviewer can decide.');assert(c.status==='PENDING_PEER_REVIEW'&&review?.status==='Pending'&&review.id===action.reviewId&&v?.id===action.versionId,'This peer-review task is no longer pending.');assert(review.reviewerId===user.entityId&&user.entityId!==c.doctorId&&user.id!==v.authorId,'Only the assigned peer reviewer can decide.');
   if(action.type==='PEER_CORRECT'){
